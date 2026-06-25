@@ -1,0 +1,10 @@
+# links.txt — işlenecek YouTube bağlantıları
+# --------------------------------------------------
+# * Her satıra BİR bağlantı yaz (tek video veya oynatma listesi).
+# * '#' ile başlayan satırlar ve boş satırlar yok sayılır.
+# * Oynatma listesi linki verirsen içindeki tüm videolar otomatik işlenir.
+#
+# Örnekler (kendi linklerinle değiştir, '#' işaretini kaldır):
+# https://www.youtube.com/watch?v=VIDEO_ID
+# https://youtu.be/VIDEO_ID
+# https://www.youtube.com/playlist?list=PLAYLIST_ID

@@ -1,55 +1,106 @@
-# YKS Soru Çözümü — Deşifre & Dataset Pipeline
+# YouTube Matematik/Geometri Soru Çözüm Veri Fabrikası
 
-YKS soru-çözüm videolarını YouTube'dan toplu olarak indirip [Whisper](https://github.com/openai/whisper) ile **deşifre eden** (transcribe) ve yapılandırılmış bir `dataset.json` üreten pipeline. Üretilen veri, sonraki adımda bir LLM ile temizlenip soru-çözüm veri setine dönüştürülür.
+YKS soru-çözüm videolarını **uçtan uca**, **tamamen yerel** ve **0 TL dış API maliyetiyle** işleyip yapılandırılmış bir veri setine (`dataset.json`) dönüştüren pipeline.
 
-## Nasıl çalışır
+> Akış: `links.txt` → **yt-dlp** ile ses indir (ham videoyu anında sil) → **faster-whisper** `large-v3` ile deşifre (`tr`, `beam_size=5`) → **temizlik + LaTeX sihirbazı** → `dataset.json`'a idempotent append.
 
-1. **İndirme** — `yt-dlp` ile her videonun sesi indirilir.
-2. **Deşifre** — `faster-whisper` (ctranslate2 / CUDA) ile ses metne çevrilir.
-   - Modeller: kalite kontrolü için ilk birkaç videoda `large-v3`, gerisinde hız için `medium`.
-3. **Kayıt** — Her video bir kayıt olarak `dataset.json`'a eklenir. Süreç **resumable**'dır: kaldığı yerden devam eder.
-4. **Temizleme (sonraki aşama)** — Transcript'ler bir LLM ile temizlenip son veri setine dönüştürülür.
+Tüm hesaplama yerel donanımında çalışır: **NVIDIA GPU varsa** `float16` (hızlı), **yoksa CPU** `int8` (yavaş ama çalışır). Otomatik tespit edilir.
 
-## Dosya yapısı
+---
 
-| Dosya | Açıklama |
+## 🚀 Tek komutla başlat
+
+Önce `links.txt` içine kendi YouTube linklerini yaz, sonra:
+
+**Windows (PowerShell):**
+```powershell
+.\run.ps1
+```
+
+**Linux / macOS:**
+```bash
+chmod +x run.sh && ./run.sh
+```
+
+Bu komut **her şeyi** yapar (idempotent — kuruluysa atlar):
+1. Python'u kontrol eder
+2. `.venv` sanal ortamı kurar
+3. Bağımlılıkları kurar (`faster-whisper`, `yt-dlp`)
+4. `ffmpeg`'i kontrol eder (Windows'ta `winget` ile kurmayı dener, yoksa yönlendirir)
+5. Donanımı yoklar (`nvidia-smi`) → CUDA/float16 ya da CPU/int8
+6. Pipeline'ı **otomatik-kurtarma** döngüsünde çalıştırır
+
+---
+
+## 🧩 Mimari / dosyalar
+
+| Dosya | Görevi |
 |---|---|
-| `pipeline.py` | Deşifre pipeline'ı; `skip.txt` desteğiyle sorunlu ("zehirli") videoları atlar. |
-| `run_all.ps1` | Orkestrasyon + **otomatik kurtarma** döngüsü (Windows / PowerShell). |
-| `dataset.json` | Üretilen veri seti (her video bir kayıt). |
-| `skip.txt` | Atlanacak / çökmeye yol açan video ID'leri. |
-| `run_all.log` | Çalışma logları. |
+| `pipeline.py` | Ana akış: indir → deşifre → temizle → kaydet. Idempotent & crash-safe. |
+| `cleaner.py` | Türkçe metin temizliği + konuşma dilini **LaTeX**'e çeviren regex sihirbazı. |
+| `run.ps1` / `run.sh` | Tek-komut kurulum + otomatik-kurtarma döngüsü. |
+| `requirements.txt` | Python bağımlılıkları. |
+| `links.txt` | İşlenecek YouTube linkleri (video veya oynatma listesi). |
+| `test_cleaner.py` | `cleaner.py` için doğrulama testleri (`python test_cleaner.py`). |
+| `dataset.json` | Üretilen veri seti (çıktı, `.gitignore`'da). |
+| `skip.txt` | Atlanacak "zehirli" video ID'leri (otomatik doldurulur). |
 
-## Kullanım (Windows / PowerShell)
+---
 
-```powershell
-cd "C:\Users\ASUS\Desktop\YUSA\YKS SORULARI"
-./run_all.ps1
+## 📦 Çıktı şeması (`dataset.json`)
+
+Her kayıt:
+
+```json
+{
+  "video_id": "YouTube_Video_ID",
+  "raw_transcript": "Temizlenmiş + LaTeX'e çevrilmiş metin",
+  "cot_steps": ["Adım adım çözüm cümleleri (LaTeX formatlı)"],
+  "processed_at": "2026-06-25T20:43:00"
+}
 ```
 
-Canlı log izleme:
+- **Idempotent:** `dataset.json`'da `video_id` zaten varsa video atlanır, veri **ezilmez**, sona **eklenir**.
+- **Resumable:** Kesinti/çökme sonrası kaldığı yerden devam eder.
+- **Crash-safe:** Her kayıttan sonra dosya atomik (`.tmp` → `replace`) yazılır.
 
-```powershell
-Get-Content run_all.log -Tail 20 -Wait -Encoding UTF8
-```
+---
 
-## Otomatik kurtarma (auto-recovery)
+## 🪄 Temizlik & LaTeX sihirbazı (`cleaner.py`)
 
-`run_all.ps1` bir döngü içinde çalışır ve dayanıklıdır:
+**Ayıklanan kalıplar:** "kanala abone olun", "beğenmeyi unutmayın", "hepinize merhaba arkadaşlar", "bir sonraki videoda görüşmek üzere", sosyal medya çağrıları vb. (içeren cümleler tamamen düşer).
 
-- Pipeline çökerse **kendini yeniden başlatır** ve kaldığı yerden devam eder (resumable).
-- Yeniden başlatmaya rağmen **ilerleme olmuyorsa**, son işlenen ("zehirli") videoyu `skip.txt`'e ekleyip atlar.
-- **Üst üste 3 kez** kurtaramazsa durur ve haber verir.
+**Konuşma dili → LaTeX dönüşümleri** (Türkçe büyük/küçük harfe duyarlı):
 
-> Bu mekanizma, video 554'te (`9nHnUnQ5BJQ`) yaşanan native çökmeden sonra eklendi (çıkış kodu `0xC0000409`, ctranslate2/CUDA tarafı). O olayda eski script sessizce durmuş ve ~7.5 saat kaybedilmişti; artık benzer durumda pipeline kendini onarır.
+| Konuşma | LaTeX |
+|---|---|
+| kök üç | `$\sqrt{3}$` |
+| x kare | `$x^2$` |
+| x küp | `$x^3$` |
+| x üzeri dört | `$x^{4}$` |
+| a bölü iki | `$a/2$` |
+| üç çarpı dört | `$3 \times 4$` |
+| doksan derece | `$90^\circ$` |
+| ABC üçgeninin alanı | `$A(\triangle ABC)$` |
+| pi sayısı | `$\pi$` |
 
-## Durum (son güncelleme)
+Doğrulamak için: `python test_cleaner.py` (23/23 test geçer).
 
-- İşlenen: ~772 / 1309 kayıt (~%59)
-- Ortalama: ~2.7 dk/video
-- Tahmini kalan: deşifre ~17–18 saat, ardından LLM temizleme ~1–1.5 gün
+---
 
-## Notlar
+## ⚙️ Ayarlar (opsiyonel ortam değişkenleri)
 
-- `dataset.json`, ses ve log dosyaları `.gitignore` ile repoya dâhil **edilmez** (büyük olabilir ve YouTube içeriği barındırır).
-- Veriyi de sürümlemek istersen `.gitignore` içindeki `dataset.json` satırını kaldır veya büyük dosyalar için [Git LFS](https://git-lfs.com/) kullan.
+| Değişken | Varsayılan | Açıklama |
+|---|---|---|
+| `WHISPER_MODEL` | `large-v3` | Model adı (örn. `medium` daha hızlı). |
+| `WHISPER_DEVICE` | otomatik | `cuda` / `cpu` zorla. |
+| `WHISPER_COMPUTE_TYPE` | otomatik | `float16` / `int8` zorla. |
+| `WHISPER_BEAM` | `5` | Beam size (doğruluk/hız dengesi). |
+
+---
+
+## ⚠️ Notlar
+
+- `ffmpeg` bir pip paketi değildir; sistem bağımlılığıdır. `run.ps1`/`run.sh` kontrol edip yönlendirir.
+- `dataset.json`, ses ve loglar `.gitignore` ile repoya dâhil edilmez (büyük olabilir + telif). Veriyi de sürümlemek istersen `.gitignore`'daki `dataset.json` satırını kaldır veya [Git LFS](https://git-lfs.com/) kullan.
+- Eski bir `dataset.json`'un varsa (farklı şemada): yeni şema `video_id` anahtarına göre idempotency uygular. Eski dosyada `video_id` alanı yoksa kayıtlar yeniden işlenebilir; temiz başlangıç için eski dosyayı yedekleyip kaldırman önerilir.

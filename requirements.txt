@@ -1,0 +1,9 @@
+# Python bağımlılıkları (0 TL — hepsi yerel çalışır, ücretli API yok)
+# ctranslate2, faster-whisper ile birlikte otomatik gelir (CUDA/CPU backend).
+faster-whisper>=1.0.0
+yt-dlp>=2024.8.6
+
+# NOT: ffmpeg bir pip paketi DEĞİLDİR; sistem paketidir.
+#   Windows : winget install Gyan.FFmpeg   (run.ps1 otomatik dener)
+#   Linux   : sudo apt install ffmpeg
+#   macOS   : brew install ffmpeg

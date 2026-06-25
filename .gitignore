@@ -8,6 +8,7 @@ env/
 .env
 
 # --- Ses / medya (geçici indirmeler) ---
+audio/
 *.mp3
 *.m4a
 *.wav
@@ -26,9 +27,12 @@ models/
 # --- Üretilen veri seti (büyük olabilir, YouTube içeriği barındırır) ---
 # Veriyi de repoya eklemek istersen aşağıdaki satırı sil:
 dataset.json
+dataset.json.tmp
+dataset.json.corrupt
 
 # --- Yerel çalışma durumu ---
 skip.txt
+current.txt
 
 # --- OS / editör ---
 .DS_Store
