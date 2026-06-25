@@ -1,0 +1,37 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.env
+
+# --- Ses / medya (geçici indirmeler) ---
+*.mp3
+*.m4a
+*.wav
+*.webm
+*.opus
+*.mp4
+
+# --- Loglar ---
+*.log
+
+# --- Whisper / model önbellekleri ---
+*.bin
+models/
+.cache/
+
+# --- Üretilen veri seti (büyük olabilir, YouTube içeriği barındırır) ---
+# Veriyi de repoya eklemek istersen aşağıdaki satırı sil:
+dataset.json
+
+# --- Yerel çalışma durumu ---
+skip.txt
+
+# --- OS / editör ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
